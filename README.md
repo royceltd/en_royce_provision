@@ -4,6 +4,8 @@ Royce Cloud client onboarding orchestration — bundles each compliance app's ow
 
 ### Documentation
 
+- [`docs/user-guide.md`](docs/user-guide.md) — how to actually onboard a client: the command, its
+  parameters, what to expect back, and troubleshooting.
 - [`docs/architecture.md`](docs/architecture.md) — what this app does, why it stays a thin bundler,
   and what each compliance app is (and isn't) able to do standalone.
 
