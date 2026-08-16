@@ -1,6 +1,11 @@
 ### Royce Provision
 
-Royce Cloud client onboarding orchestration — bundles each compliance app\'s own provisioning behind one call
+Royce Cloud client onboarding orchestration — bundles each compliance app's own provisioning behind one call
+
+### Documentation
+
+- [`docs/architecture.md`](docs/architecture.md) — what this app does, why it stays a thin bundler,
+  and what each compliance app is (and isn't) able to do standalone.
 
 ### Installation
 

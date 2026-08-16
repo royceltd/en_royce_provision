@@ -1,7 +1,7 @@
 app_name = "royce_provision"
 app_title = "Royce Provision"
 app_publisher = "Royce Technologies LTD"
-app_description = "Royce Cloud client onboarding orchestration — bundles each compliance app\'s own provisioning behind one call"
+app_description = "Royce Cloud client onboarding orchestration — bundles each compliance app's own provisioning behind one call"
 app_email = "developer@roycetechnologies.co.ke"
 app_license = "mit"
 
