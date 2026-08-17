@@ -92,12 +92,21 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 	return doc.name
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def onboard_client(company, abbr, apps, country="Kenya", currency="KES", rates=None):
 	"""The single place "onboard a client" happens from. Runs the company-level
 	setup no individual compliance app owns, then calls each purchased
 	product's own provisioning and verification — in that order, so a
-	provisioning failure is caught before it's declared done, not after."""
+	provisioning failure is caught before it's declared done, not after.
+
+	Restricted to System Manager: architecture.md and the user guide are both
+	explicit that v1 onboarding is Royce staff, by hand, not a self-serve or
+	general API call. @frappe.whitelist() alone doesn't enforce that — it just
+	requires *some* authenticated session — so this checks the role directly
+	rather than leaving the restriction as prose only."""
+	if "System Manager" not in frappe.get_roles():
+		frappe.throw(_("Not permitted — onboard_client is restricted to System Managers."), frappe.PermissionError)
+
 	if isinstance(apps, str):
 		apps = frappe.parse_json(apps)
 	if not apps:
