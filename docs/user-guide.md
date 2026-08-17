@@ -22,17 +22,23 @@ command. It assumes a site already exists and picks up from there.
 
 ## 2. Onboarding a client
 
-One command, run once per client, from a terminal:
+One command, run once per client, from a terminal. Use `onboard_client_cli`, not `onboard_client`,
+for anything run via `bench execute` — see the troubleshooting table (section 7) for why: `bench
+execute` masks real errors from `onboard_client()` behind a confusing `NameError`, and
+`onboard_client_cli` is the wrapper that avoids it. Same behavior on success either way.
 
 ```
-bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll"]}'
+bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client_cli --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll"]}'
 ```
 
 Bought both products? List both:
 
 ```
-bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll", "etims"]}'
+bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client_cli --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll", "etims"]}'
 ```
+
+(`onboard_client()` itself is still the one to reach for from `bench console` or a future UI —
+interactive contexts where a raised exception surfaces on its own, no wrapper needed.)
 
 ### Parameters
 
@@ -128,3 +134,4 @@ credentials, branch/device registration) — see `royce_etims/docs/architecture.
 | `"No effective, submitted Payroll Rates record found."` | No Payroll Rates exists yet, or none is both submitted and dated on/before today. Create one first — see `royce_payroll_ke`'s user guide section 2 |
 | `"Payroll provisioning verification failed for ..."` with a list of problems | `verify()` caught real drift after provisioning — read the specific list, it names exactly what's wrong. The client is not marked `"live"` when this happens; fix what's listed and re-run |
 | `AttributeError: module 'frappe' has no attribute 'installer'` | Shouldn't happen — this was a real bug caught and fixed during development (see `architecture.md` section 3). If it resurfaces, something in the environment changed; it's not something to work around in this app |
+| `NameError: name 'royce_provision' is not defined` from `bench execute` | Not the real error — `bench execute`'s own fallback masks whatever `onboard_client()` actually raised (see `architecture.md` section 4). Two likely real causes: (a) `royce_provision` isn't installed on this site yet — check with `bench --site [site] list-apps`, run `bench --site [site] install-app royce_provision` if missing; (b) a genuine failure from one of the rows above, hidden by the masking. For scripted/CI use, call `onboard_client_cli` instead (below) — it never raises, so this masking can't happen, and the real error comes back in the printed result's `message` field |

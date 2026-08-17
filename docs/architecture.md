@@ -3,11 +3,19 @@
 Status: **built, verified against a real onboarding run**. Update this file as decisions change —
 it's meant to stay current, not to be a one-time snapshot.
 
-This app is Royce Cloud's own control-plane tool. It is never installed on a client's site — only
-on Royce's own infrastructure, wherever staff actually run onboarding from. See
-`royce_payroll_ke/docs/architecture.md` for the Compliance Cloud tenancy decisions this assumes
-(Model A — one site per client, shared bench) and `royce_etims/docs/architecture.md` for that app's
-own state.
+This app IS installed on each client's site — corrected here after this contradicted the user
+guide's own Prerequisites table, and after `frappe.get_attr()` was confirmed empirically to refuse
+to resolve into any app that isn't in the site's `installed_apps`, regardless of whether it's
+present in the shared bench. `bench execute module.path.fn` fails with `AppNotInstalledError`
+(itself then masked by bench's own fallback into a confusing `NameError` — see the user guide's
+troubleshooting table) against a site that never ran `bench install-app royce_provision`.
+`onboard-client.sh`'s `bench new-site` call already installs it for every new site; it only needs
+installing by hand on sites that predate this app. What *is* still true: this app is Royce Cloud's
+own control-plane tool, never surfaced to a client as a product they interact with — "installed on
+the site" and "something the client sees or uses" are different claims, and only the first one is
+correct. See `royce_payroll_ke/docs/architecture.md` for the Compliance Cloud tenancy decisions this
+assumes (Model A — one site per client, shared bench) and `royce_etims/docs/architecture.md` for
+that app's own state.
 
 ## Decisions locked so far
 
@@ -86,3 +94,28 @@ First live run failed immediately: `AttributeError: module 'frappe' has no attri
 a package just because the package itself is imported — it needs its own explicit
 `from frappe.installer import install_app`, not an attribute-path reference assumed to work because
 it reads naturally. Fixed, then re-run confirmed clean.
+
+## 4. `bench execute` masks real errors — worked around, not fixed upstream
+
+Found while wiring `onboard-client.sh` up to a real image build, not a hypothetical either.
+`bench execute module.path.fn` first tries `frappe.get_attr(method)(*args, **kwargs)`; if *that*
+raises anything — an app not installed, a validation error from deep inside `onboard_client()`,
+anything — bench's own `execute()` doesn't surface it. It falls through to a fallback that compiles
+the method path itself as a bare expression and evals it, which fails with an unrelated
+`NameError: name 'royce_provision' is not defined` no matter what the real problem was. Confirmed
+directly against this bench version's source (`frappe/commands/utils.py`), not inferred.
+
+This directly undermined the "don't paper over a provisioning failure, surface the real error"
+principle this app and `onboard-client.sh` both rely on — staff would see a useless `NameError`
+instead of e.g. "No effective, submitted Payroll Rates record found." `bench console` isn't a
+usable substitute either: a `sys.exit(1)` raised inside a piped console session gets caught by
+IPython as "user wants to quit," prompts for confirmation, and the outer process exits `0`
+regardless of what happened inside.
+
+Fix: `onboard_client_cli()` — a wrapper that never raises. It calls `onboard_client()`, catches
+everything, and returns a plain dict either way (`{"status": "error", "error_type": ..., "message":
+...}` on failure). Since it never raises, `bench execute` always takes its normal success path and
+the real error ends up in the printed result. `onboard-client.sh` calls this wrapper, not
+`onboard_client()` directly, and checks the returned `status` field itself rather than relying on
+bench's exit code. `onboard_client()` keeps its original raise-on-failure behavior for direct/
+interactive callers (bench console, a future UI) where exceptions surface fine on their own.
