@@ -103,7 +103,25 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 	(`Duties and Taxes`, `Indirect Expenses`, `Accounts Payable`)
 	royce_payroll_ke's own `provision()` assumes already exist and throws a
 	clear error about if they don't. Creating the Company properly here is
-	what makes that assumption actually hold for a brand new client."""
+	what makes that assumption actually hold for a brand new client.
+
+	Also seeds ERPNext's own setup-wizard fixtures first (Warehouse Types,
+	default UOMs, Address Templates, ...) — found the hard way: `bench
+	new-site --install-app erpnext` does NOT run these. They're only ever
+	installed by the interactive Setup Wizard, which nothing in this
+	programmatic flow goes through. Company creation's own hooks assume they
+	already exist (e.g. the default "Goods In Transit" warehouse needs a
+	"Transit" Warehouse Type record) and fail with a confusing
+	LinkValidationError if they don't. `install()` is the same function the
+	wizard itself calls for this step (not setup_complete() — that one also
+	creates the Company, which would duplicate what this function already
+	does its own simpler way) and is idempotent (uses
+	ignore_if_duplicate=True internally), so calling it unconditionally
+	every time is safe."""
+	from erpnext.setup.setup_wizard.operations.install_fixtures import install as install_erpnext_fixtures
+
+	install_erpnext_fixtures(country)
+
 	if frappe.db.exists("Company", company):
 		return company
 
