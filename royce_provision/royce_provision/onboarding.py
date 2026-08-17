@@ -131,11 +131,17 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 	interactive Setup Wizard normally does, found the same way as the
 	fixtures gap: every site this pipeline creates redirected every login to
 	/desk/setup-wizard, even though the Company/CoA/fixtures were already
-	genuinely in place. frappe.is_setup_complete() checks a per-app flag on
-	the "Installed Application" doctype for "frappe" and "erpnext"
-	specifically, set normally by the wizard's own
-	enable_setup_wizard_complete() at the end of each stage — called here
-	directly instead of duplicating its one-line body."""
+	genuinely in place. First attempt only marked "frappe" and "erpnext"
+	complete, matching frappe.is_setup_complete()'s own check — but that
+	wasn't the whole story: something client-side treats ANY installed app
+	with is_setup_complete=0 as reason to keep re-mounting the wizard,
+	which showed up as a real, reproducible infinite reload loop on /desk
+	(confirmed in frontend access logs: setup_wizard.load_languages called
+	once a second, forever) on a site whose OTHER apps — hrms, royce_talk,
+	royce_etims, royce_payroll_ke, royce_provision itself — were all still
+	flagged incomplete. Fix: mark every currently installed app, not a
+	hardcoded pair, using the wizard's own one-line
+	enable_setup_wizard_complete() rather than duplicating its body."""
 	if frappe.db.exists("Company", company):
 		return company
 
@@ -155,8 +161,8 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 	)
 	doc.insert(ignore_permissions=True)
 
-	enable_setup_wizard_complete("frappe")
-	enable_setup_wizard_complete("erpnext")
+	for app_name in frappe.get_installed_apps():
+		enable_setup_wizard_complete(app_name)
 
 	return doc.name
 
