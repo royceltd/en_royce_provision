@@ -141,12 +141,28 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 	royce_etims, royce_payroll_ke, royce_provision itself — were all still
 	flagged incomplete. Fix: mark every currently installed app, not a
 	hardcoded pair, using the wizard's own one-line
-	enable_setup_wizard_complete() rather than duplicating its body."""
+	enable_setup_wizard_complete() rather than duplicating its body.
+
+	Even with every app flagged complete, sites kept looping — traced to a
+	THIRD, separate mechanism: frappe.boot.home_page (what the desk shell
+	navigates to on load) comes from the "desktop:home_page" default,
+	which frappe/utils/install.py sets to "setup-wizard" for every fresh
+	site and only the interactive wizard's own disable_future_access()
+	ever clears — to "workspace", plus System Settings.setup_complete,
+	which turned out to be a distinct field from frappe.is_setup_complete()
+	and was still 0 despite every Installed Application flag being 1.
+	A site stuck with home_page="setup-wizard" boots straight into the
+	wizard page every time, which (since bootinfo.setup_complete IS true)
+	immediately tries to bounce away via a full-page navigate to "/apps" —
+	not a real server route, so it 301s straight back to /desk, which
+	boots into home_page="setup-wizard" again: a genuine infinite
+	full-page-reload loop, confirmed in real time in access logs, not a
+	browser-side artifact (survived a private/incognito window)."""
 	if frappe.db.exists("Company", company):
 		return company
 
 	from erpnext.setup.setup_wizard.operations.install_fixtures import install as install_erpnext_fixtures
-	from frappe.desk.page.setup_wizard.setup_wizard import enable_setup_wizard_complete
+	from frappe.desk.page.setup_wizard.setup_wizard import disable_future_access, enable_setup_wizard_complete
 
 	install_erpnext_fixtures(country)
 
@@ -163,6 +179,8 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 
 	for app_name in frappe.get_installed_apps():
 		enable_setup_wizard_complete(app_name)
+
+	disable_future_access()
 
 	return doc.name
 
@@ -270,11 +288,19 @@ def reassert_setup_complete():
 	Company records actually exist (needs a name or filter dict to mean
 	anything), which silently no-op'd this entire function on every call,
 	including from the after_migrate hook itself, until this was found by
-	testing the function directly rather than trusting it worked."""
+	testing the function directly rather than trusting it worked.
+
+	Also re-runs disable_future_access() — the Installed Application flags
+	turned out not to be the whole story either (see ensure_company()'s own
+	docstring for the "desktop:home_page" / System Settings.setup_complete
+	saga); re-asserting both here too, defensively, in case a future migrate
+	ever resets either the way it already reset the per-app flags."""
 	if not frappe.db.count("Company"):
 		return
 
-	from frappe.desk.page.setup_wizard.setup_wizard import enable_setup_wizard_complete
+	from frappe.desk.page.setup_wizard.setup_wizard import disable_future_access, enable_setup_wizard_complete
 
 	for app_name in frappe.get_installed_apps():
 		enable_setup_wizard_complete(app_name)
+
+	disable_future_access()
