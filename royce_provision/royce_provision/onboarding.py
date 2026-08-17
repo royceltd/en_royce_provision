@@ -245,3 +245,36 @@ def onboard_client_cli(company, abbr, apps, country="Kenya", currency="KES", rat
 			"error_type": type(e).__name__,
 			"message": str(e),
 		}
+
+
+def reassert_setup_complete():
+	"""after_migrate hook. Not a fix by itself — a defense against
+	`bench migrate` silently undoing ensure_company()'s fix.
+
+	`bench migrate` runs frappe's own Installed Applications.update_versions(),
+	which unconditionally recomputes Installed Application.is_setup_complete
+	for every app on every migrate — including resetting it back to 0 for
+	every app except frappe/erpnext, with no awareness that onboard_client()
+	already asserted otherwise. Found live: a site that had been fully
+	onboarded and working started looping on
+	/desk -> setup_wizard.load_languages -> /desk again, once a second,
+	forever, after nothing but a routine `bench --site all migrate` — no code
+	change, no new onboarding call, just the migrate itself.
+
+	Re-asserts every currently installed app as setup-complete, every time
+	this site migrates. Skips sites with no Company yet — one mid-onboarding,
+	or one that's never been onboarded, should still see the real wizard.
+
+	Uses frappe.db.count(), not frappe.db.exists("Company") with no second
+	argument — caught live, the latter is falsy regardless of how many
+	Company records actually exist (needs a name or filter dict to mean
+	anything), which silently no-op'd this entire function on every call,
+	including from the after_migrate hook itself, until this was found by
+	testing the function directly rather than trusting it worked."""
+	if not frappe.db.count("Company"):
+		return
+
+	from frappe.desk.page.setup_wizard.setup_wizard import enable_setup_wizard_complete
+
+	for app_name in frappe.get_installed_apps():
+		enable_setup_wizard_complete(app_name)

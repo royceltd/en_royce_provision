@@ -88,6 +88,15 @@ app_license = "mit"
 # before_install = "royce_provision.install.before_install"
 # after_install = "royce_provision.install.after_install"
 
+# Migration Hooks
+# ----------------
+# bench migrate resets Installed Application.is_setup_complete for every app
+# on every run (see onboarding.reassert_setup_complete's own docstring —
+# found live as a real, reproducible infinite /desk reload loop, not a
+# hypothetical). Re-assert it every time this site migrates, not just once
+# during onboarding.
+after_migrate = ["royce_provision.royce_provision.onboarding.reassert_setup_complete"]
+
 # Uninstallation
 # ------------
 
