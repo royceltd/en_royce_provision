@@ -135,3 +135,34 @@ def onboard_client(company, abbr, apps, country="Kenya", currency="KES", rates=N
 
 	result["status"] = "live"
 	return result
+
+
+@frappe.whitelist(methods=["POST"])
+def onboard_client_cli(company, abbr, apps, country="Kenya", currency="KES", rates=None):
+	"""CLI-safe wrapper around onboard_client(), meant for `bench execute`.
+
+	bench's own execute() has a real gap: when the target callable raises,
+	it doesn't surface that exception — it falls through to a confusing
+	fallback (compiling the method path itself as a bare expression) that
+	fails with an unrelated NameError, hiding whatever actually went wrong.
+	Confirmed against this bench version, not assumed.
+
+	This wrapper never raises. It catches everything onboard_client() throws
+	and returns a plain dict describing the failure instead, so bench execute
+	always takes its normal success path — the real error message ends up in
+	the printed result, not swallowed. Same role/method restriction as
+	onboard_client() itself; kept separate rather than folded into it so
+	onboard_client()'s "let it raise" behavior stays intact for direct,
+	interactive use (e.g. bench console, where exceptions surface fine)."""
+	if "System Manager" not in frappe.get_roles():
+		frappe.throw(_("Not permitted — onboard_client_cli is restricted to System Managers."), frappe.PermissionError)
+
+	try:
+		return onboard_client(company, abbr, apps, country=country, currency=currency, rates=rates)
+	except Exception as e:
+		frappe.db.rollback()
+		return {
+			"status": "error",
+			"error_type": type(e).__name__,
+			"message": str(e),
+		}
