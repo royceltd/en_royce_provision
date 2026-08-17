@@ -105,25 +105,33 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 	clear error about if they don't. Creating the Company properly here is
 	what makes that assumption actually hold for a brand new client.
 
-	Also seeds ERPNext's own setup-wizard fixtures first (Warehouse Types,
-	default UOMs, Address Templates, ...) — found the hard way: `bench
-	new-site --install-app erpnext` does NOT run these. They're only ever
-	installed by the interactive Setup Wizard, which nothing in this
-	programmatic flow goes through. Company creation's own hooks assume they
-	already exist (e.g. the default "Goods In Transit" warehouse needs a
-	"Transit" Warehouse Type record) and fail with a confusing
-	LinkValidationError if they don't. `install()` is the same function the
-	wizard itself calls for this step (not setup_complete() — that one also
-	creates the Company, which would duplicate what this function already
-	does its own simpler way) and is idempotent (uses
-	ignore_if_duplicate=True internally), so calling it unconditionally
-	every time is safe."""
+	Also seeds ERPNext's own setup-wizard fixtures before creating a genuinely
+	new Company (Warehouse Types, default UOMs, Address Templates, ...) —
+	found the hard way: `bench new-site --install-app erpnext` does NOT run
+	these. They're only ever installed by the interactive Setup Wizard, which
+	nothing in this programmatic flow goes through. Company creation's own
+	hooks assume they already exist (e.g. the default "Goods In Transit"
+	warehouse needs a "Transit" Warehouse Type record) and fail with a
+	confusing LinkValidationError if they don't. `install()` is the same
+	function the wizard itself calls for this step (not setup_complete() —
+	that one also creates the Company, which would duplicate what this
+	function already does its own simpler way).
+
+	Only called in the branch that's actually about to insert a new Company,
+	not unconditionally: `install()` IS idempotent (ignore_if_duplicate=True
+	internally), but re-running it against a site that already has these
+	fixtures logs a wall of harmless-but-noisy "NestedSetRecursionError"
+	tracebacks for already-rooted nested-set doctypes (Item Group, Territory,
+	...) — caught internally, never propagates, but there's no reason to
+	pay that cost on every single onboard_client() call against an
+	already-onboarded company (section 5 of the user guide: adding a second
+	product later calls this again with the same company on purpose)."""
+	if frappe.db.exists("Company", company):
+		return company
+
 	from erpnext.setup.setup_wizard.operations.install_fixtures import install as install_erpnext_fixtures
 
 	install_erpnext_fixtures(country)
-
-	if frappe.db.exists("Company", company):
-		return company
 
 	doc = frappe.get_doc(
 		{
