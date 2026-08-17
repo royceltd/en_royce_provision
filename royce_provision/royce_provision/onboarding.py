@@ -125,11 +125,22 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 	...) — caught internally, never propagates, but there's no reason to
 	pay that cost on every single onboard_client() call against an
 	already-onboarded company (section 5 of the user guide: adding a second
-	product later calls this again with the same company on purpose)."""
+	product later calls this again with the same company on purpose).
+
+	Also marks the site as "setup complete" — another thing only the
+	interactive Setup Wizard normally does, found the same way as the
+	fixtures gap: every site this pipeline creates redirected every login to
+	/desk/setup-wizard, even though the Company/CoA/fixtures were already
+	genuinely in place. frappe.is_setup_complete() checks a per-app flag on
+	the "Installed Application" doctype for "frappe" and "erpnext"
+	specifically, set normally by the wizard's own
+	enable_setup_wizard_complete() at the end of each stage — called here
+	directly instead of duplicating its one-line body."""
 	if frappe.db.exists("Company", company):
 		return company
 
 	from erpnext.setup.setup_wizard.operations.install_fixtures import install as install_erpnext_fixtures
+	from frappe.desk.page.setup_wizard.setup_wizard import enable_setup_wizard_complete
 
 	install_erpnext_fixtures(country)
 
@@ -143,6 +154,10 @@ def ensure_company(company, abbr, country="Kenya", currency="KES"):
 		}
 	)
 	doc.insert(ignore_permissions=True)
+
+	enable_setup_wizard_complete("frappe")
+	enable_setup_wizard_complete("erpnext")
+
 	return doc.name
 
 
