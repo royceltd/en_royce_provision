@@ -14,17 +14,25 @@ Site creation (`bench new-site`) stays a separate manual step; this module
 picks up from there — an existing site, a company that may or may not exist
 yet, and a list of what this client actually bought.
 
-    bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client \\
-      --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll"]}'
+    bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client_cli \\
+      --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll", "etims", "talk"]}'
 
-`apps` is a list drawn from PRODUCTS below. Right now that's just
-`["payroll"]` — `royce_etims` has no provision()-style entry point yet, and
-its own architecture doc is explicit that KRA registration needs a human
-entering a real TIN and Apigee credentials, so it can never be a no-input
-call the way payroll is. `PRODUCTS["etims"]` is filled in with what exists
-today (just an install step) precisely so this stays the one place that
-knows what "onboard a client" means — ready to wire in a real etims
-provision() call the moment one exists, without restructuring anything here.
+`apps` is a list drawn from PRODUCTS below. Only `"payroll"` has a real
+provision() — both `royce_etims` and `royce_talk` install-only, honestly
+reporting nothing further is automated rather than silently doing nothing
+while claiming success. Neither can ever be a no-input call the way payroll
+is: etims needs a human entering a real KRA TIN and Apigee credentials
+(royce_etims's own architecture doc is explicit about that), and talk needs
+a human entering a real RoyceTalk API key and Sender ID (there's no
+provision()-worthy setup beyond what royce_talk's own after_install hook
+already does automatically on install). Both PRODUCTS entries are filled in
+with what exists today precisely so this stays the one place that knows
+what "onboard a client" means — ready to wire in a real provision() call
+for either the moment one exists, without restructuring anything here.
+
+Before any client can onboard "payroll", royce_payroll_ke.setup.seed_default_rates()
+must have been run once for this environment — it's a one-time bootstrap, not
+part of any individual client's onboarding (see that function's own docstring).
 """
 
 import frappe
@@ -39,6 +47,11 @@ PRODUCTS = {
 	},
 	"etims": {
 		"install": ["royce_etims"],
+		"provision": None,
+		"verify": None,
+	},
+	"talk": {
+		"install": ["royce_talk"],
 		"provision": None,
 		"verify": None,
 	},

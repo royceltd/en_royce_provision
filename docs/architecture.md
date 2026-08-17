@@ -32,17 +32,24 @@ that app's own state.
 - **Site creation stays a separate, manual step.** `bench new-site` is not something this app
   wraps. `onboard_client()` picks up from an existing site — creating the Company, installing the
   apps this client bought, and provisioning them — not from nothing.
-- **`royce_etims` has no `provision()` yet, and is not faked into having one.** Checked before
-  building, not assumed: no `provision()`-style entry point exists in `royce_etims` as of this
-  writing, and its own architecture doc is explicit that KRA registration needs a human entering a
-  real TIN and Apigee credentials — it can never be a no-input call the way payroll is.
-  `PRODUCTS["etims"]` in `onboarding.py` installs the app and reports honestly that provisioning
-  isn't automated yet, rather than silently doing nothing while claiming success.
+- **`royce_etims` and `royce_talk` have no `provision()` yet, and neither is faked into having one.**
+  Checked before building, not assumed: no `provision()`-style entry point exists in either app as
+  of this writing. Neither can ever be a no-input call the way payroll is — `royce_etims`'s own
+  architecture doc is explicit that KRA registration needs a human entering a real TIN and Apigee
+  credentials, and `royce_talk` needs a human entering a real RoyceTalk API key and Sender ID.
+  `PRODUCTS["etims"]` and `PRODUCTS["talk"]` in `onboarding.py` install their app and report
+  honestly that provisioning isn't automated, rather than silently doing nothing while claiming
+  success.
+- **`payroll` has a real environment-level prerequisite `onboard_client()` does not create:** a
+  submitted Payroll Rates record. `PayrollRates.get_effective()` has no company filter — it's one
+  shared, Kenya-wide record every client draws from, so it's a once-per-bench bootstrap
+  (`royce_payroll_ke.setup.seed_default_rates()`), not something onboarding should ever create
+  per-client. Deliberately kept out of `onboard_client()` itself for that reason.
 
 ## Open / not yet decided
 
-- Whether `royce_etims` ever gets a `provision()` worth calling here, or whether its onboarding
-  stays a human checklist permanently given the KRA-credentials requirement.
+- Whether `royce_etims` or `royce_talk` ever get a `provision()` worth calling here, or whether
+  their onboarding stays a human checklist permanently given the credentials each needs.
 - Whether this app eventually needs to shell out to `bench new-site` itself (making onboarding
   genuinely one command end to end) or whether site creation staying manual is fine indefinitely.
 - Self-serve — deliberately not designed for yet. The functions here are the foundation for it
@@ -54,17 +61,20 @@ that app's own state.
 
 ```mermaid
 flowchart TD
-    A["bench execute onboard_client(company, abbr, apps)"] --> B["ensure_apps_installed(apps)\ncascades each app's own required_apps"]
+    A["bench execute onboard_client_cli(company, abbr, apps)"] --> B["ensure_apps_installed(apps)\ncascades each app's own required_apps"]
     B --> C["ensure_company(company, abbr, country, currency)\ncreates Company -> applies the Kenya CoA template"]
     C --> D{"'payroll' in apps?"}
-    D -- yes --> E["royce_payroll_ke.setup.provision(company)"]
+    D -- yes --> E["royce_payroll_ke.setup.provision(company)\n(needs seed_default_rates() run once, beforehand)"]
     E --> F["royce_payroll_ke.setup.verify(company)"]
     F -- fail --> G["Raise — onboarding is not done"]
     F -- pass --> H
     D -- no --> H{"'etims' in apps?"}
     H -- yes --> I["Install only —\nreport 'no automated provisioning yet'"]
-    H -- no --> J["status: live"]
-    I --> J
+    H -- no --> K{"'talk' in apps?"}
+    I --> K
+    K -- yes --> L["Install only —\nafter_install auto-fills callback URL,\nAPI key still needs a human"]
+    K -- no --> J["status: live"]
+    L --> J
 ```
 
 Verified against a real run, not a description of intended behavior: a company that had never

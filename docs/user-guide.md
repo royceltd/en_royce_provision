@@ -15,7 +15,7 @@ command. It assumes a site already exists and picks up from there.
 |---|---|---|
 | A site for this client | — | Create it yourself first: `bench new-site [client-site]` — this app doesn't create sites |
 | `royce_provision` installed on that site | `bench --site [site] list-apps` | `bench --site [site] install-app royce_provision` if not |
-| A submitted Payroll Rates record | `royce_payroll_ke`'s own Payroll Rates list | Needed if onboarding the `payroll` product — see `royce_payroll_ke`'s user guide section 2 if none exists yet |
+| A submitted Payroll Rates record | `royce_payroll_ke`'s own Payroll Rates list | Needed if onboarding the `payroll` product. This is an **environment-wide, one-time** prerequisite, not a per-client one — run `bench --site [any-site-on-this-bench] execute royce_payroll_ke.royce_payroll_ke.setup.seed_default_rates` once per bench if it's never been done (safe to re-run — no-ops if a record already exists), or see `royce_payroll_ke`'s user guide section 2 to create one by hand |
 | Company name, abbreviation, and which products were bought | — | Decided before you run anything |
 
 ---
@@ -31,10 +31,10 @@ execute` masks real errors from `onboard_client()` behind a confusing `NameError
 bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client_cli --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll"]}'
 ```
 
-Bought both products? List both:
+Bought more than one product? List them all:
 
 ```
-bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client_cli --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll", "etims"]}'
+bench --site [client-site] execute royce_provision.royce_provision.onboarding.onboard_client_cli --kwargs '{"company": "Acme Ltd", "abbr": "ACM", "apps": ["payroll", "etims", "talk"]}'
 ```
 
 (`onboard_client()` itself is still the one to reach for from `bench console` or a future UI —
@@ -46,7 +46,7 @@ interactive contexts where a raised exception surfaces on its own, no wrapper ne
 |---|---|---|---|
 | `company` | Yes | — | The Company's full display name, e.g. `"Acme Ltd"` |
 | `abbr` | Yes | — | Short company abbreviation. Shows up in every account name this creates (`PAYE Payable - ACM`) — pick it deliberately, it's not easily changed later |
-| `apps` | Yes | — | List of products the client bought: `"payroll"`, `"etims"`, or both |
+| `apps` | Yes | — | List of products the client bought: any of `"payroll"`, `"etims"`, `"talk"` |
 | `country` | No | `"Kenya"` | Only change this if you're genuinely onboarding a non-Kenya company — everything downstream assumes Kenya |
 | `currency` | No | `"KES"` | Same caveat as `country` |
 | `rates` | No | whichever Payroll Rates is currently effective | Pass a specific version name (e.g. `"2026-01-01"`) to pin onboarding to a particular rate set instead of "whatever's active today" |
@@ -68,7 +68,10 @@ interactive contexts where a raised exception surfaces on its own, no wrapper ne
 4. **For `etims`**: installs `royce_etims` only. Nothing is provisioned automatically — KRA
    registration needs a real TIN and Apigee credentials that only a human can enter. See
    `royce_etims`'s own architecture doc for that checklist.
-5. Returns a structured summary of every step taken.
+5. **For `talk`**: installs `royce_talk` only. Its own `after_install` hook auto-populates the
+   Delivery Callback URL, but the client's actual RoyceTalk API key and Sender ID still need a
+   human to enter them — same reasoning as `etims`.
+6. Returns a structured summary of every step taken.
 
 ---
 
@@ -115,12 +118,17 @@ straight to installing and provisioning the new product.
 
 ---
 
-## 6. Finishing eTIMS setup
+## 6. Finishing eTIMS / RoyceTalk setup
 
-`onboard_client()` installs `royce_etims` but does not configure it — that's not a gap, it's a
-limit of what can be automated without a human present. Once the app is installed, whoever's
-handling this client needs to work through `royce_etims`'s own manual checklist (TIN, Apigee
-credentials, branch/device registration) — see `royce_etims/docs/architecture.md`'s onboarding flow.
+Neither `etims` nor `talk` is fully configured by onboarding — that's not a gap, it's a limit of
+what can be automated without a human present.
+
+- **eTIMS**: once `royce_etims` is installed, whoever's handling this client needs to work through
+  its own manual checklist (TIN, Apigee credentials, branch/device registration) — see
+  `royce_etims/docs/architecture.md`'s onboarding flow.
+- **RoyceTalk**: once `royce_talk` is installed, open **RoyceTalk Settings** on the client's site
+  and enter their actual RoyceTalk API key and default Sender ID (the Delivery Callback URL is
+  already filled in). Use the "Send Test SMS" button to confirm it before calling this done.
 
 ---
 
@@ -129,7 +137,7 @@ credentials, branch/device registration) — see `royce_etims/docs/architecture.
 | Symptom | Likely cause |
 |---|---|
 | `"At least one product is required — got none."` | `apps` was empty or not passed |
-| `"Unknown product 'X'. Known products: ['payroll', 'etims']"` | A typo in `apps` — values must be exactly `payroll` or `etims` |
+| `"Unknown product 'X'. Known products: ['payroll', 'etims', 'talk']"` | A typo in `apps` — values must be exactly `payroll`, `etims`, or `talk` |
 | `"Expected parent account ... not found"` | Bubbled up from `royce_payroll_ke.setup.provision()` — the Company's Chart of Accounts doesn't have the standard Kenya groups. Shouldn't happen if `country` was left as `"Kenya"`; check that field on the Company if it does |
 | `"No effective, submitted Payroll Rates record found."` | No Payroll Rates exists yet, or none is both submitted and dated on/before today. Create one first — see `royce_payroll_ke`'s user guide section 2 |
 | `"Payroll provisioning verification failed for ..."` with a list of problems | `verify()` caught real drift after provisioning — read the specific list, it names exactly what's wrong. The client is not marked `"live"` when this happens; fix what's listed and re-run |
