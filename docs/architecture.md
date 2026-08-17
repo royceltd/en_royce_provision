@@ -40,11 +40,16 @@ that app's own state.
   `PRODUCTS["etims"]` and `PRODUCTS["talk"]` in `onboarding.py` install their app and report
   honestly that provisioning isn't automated, rather than silently doing nothing while claiming
   success.
-- **`payroll` has a real environment-level prerequisite `onboard_client()` does not create:** a
-  submitted Payroll Rates record. `PayrollRates.get_effective()` has no company filter — it's one
-  shared, Kenya-wide record every client draws from, so it's a once-per-bench bootstrap
-  (`royce_payroll_ke.setup.seed_default_rates()`), not something onboarding should ever create
-  per-client. Deliberately kept out of `onboard_client()` itself for that reason.
+- **`payroll` has a real prerequisite, and it's per-SITE, not per-company or per-bench —
+  corrected here after getting this wrong the first time.** `PayrollRates.get_effective()` has no
+  company filter, which reads as "one shared record for everything" — but Model A means one site
+  (one database) per client, and Payroll Rates doesn't cross that boundary any more than any other
+  doctype does. A fresh client's site genuinely has no rates record yet, regardless of what other
+  clients' sites have. Given that, keeping it a separate manual step per site would just be a
+  prerequisite someone forgets, not a meaningful safety boundary — so `onboard_client()`'s payroll
+  branch calls `seed_default_rates()` itself, every time, before `provision()`. Safe because it's
+  idempotent (no-ops if this site already has an effective record); the function itself still
+  exists standalone for anyone who wants different values than the shipped default.
 
 ## Open / not yet decided
 
@@ -64,7 +69,8 @@ flowchart TD
     A["bench execute onboard_client_cli(company, abbr, apps)"] --> B["ensure_apps_installed(apps)\ncascades each app's own required_apps"]
     B --> C["ensure_company(company, abbr, country, currency)\ncreates Company -> applies the Kenya CoA template"]
     C --> D{"'payroll' in apps?"}
-    D -- yes --> E["royce_payroll_ke.setup.provision(company)\n(needs seed_default_rates() run once, beforehand)"]
+    D -- yes --> E0["royce_payroll_ke.setup.seed_default_rates()\n(idempotent - no-ops if this site already has one)"]
+    E0 --> E["royce_payroll_ke.setup.provision(company)"]
     E --> F["royce_payroll_ke.setup.verify(company)"]
     F -- fail --> G["Raise — onboarding is not done"]
     F -- pass --> H
@@ -129,3 +135,18 @@ the real error ends up in the printed result. `onboard-client.sh` calls this wra
 `onboard_client()` directly, and checks the returned `status` field itself rather than relying on
 bench's exit code. `onboard_client()` keeps its original raise-on-failure behavior for direct/
 interactive callers (bench console, a future UI) where exceptions surface fine on their own.
+
+## 5. "Once per bench" was wrong — Payroll Rates is per-site
+
+Shipped and documented `seed_default_rates()` as a once-per-bench bootstrap, on the reasoning that
+`PayrollRates.get_effective()` has no company filter so it must be "one shared record." That's true
+within a single site's database — it says nothing about *across* sites, and Model A puts one
+site (one database) per client. A fresh client's site has no rates record no matter how many other
+clients already onboarded, so "once per bench" would have meant every second-or-later client
+hitting `"No effective, submitted Payroll Rates record found"` on their first payroll onboarding —
+a confusing failure for something that should just work.
+
+Caught before it shipped to a real client, not after — corrected by making `onboard_client()`'s
+payroll branch call `seed_default_rates()` itself (section "Decisions locked so far" above), so the
+per-site reality is handled automatically instead of depending on someone reading this doc's
+original, wrong claim closely enough to catch the gap.

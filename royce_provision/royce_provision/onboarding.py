@@ -30,9 +30,15 @@ with what exists today precisely so this stays the one place that knows
 what "onboard a client" means — ready to wire in a real provision() call
 for either the moment one exists, without restructuring anything here.
 
-Before any client can onboard "payroll", royce_payroll_ke.setup.seed_default_rates()
-must have been run once for this environment — it's a one-time bootstrap, not
-part of any individual client's onboarding (see that function's own docstring).
+PRODUCTS["payroll"]["bootstrap"] handles the one real environment-level
+prerequisite payroll has: a submitted Payroll Rates record. That's per-SITE,
+not per-bench or per-company — Payroll Rates has no company filter, but each
+client here gets their own site (own database), so a fresh site has no
+record yet regardless of what other sites have. onboard_client() calls
+seed_default_rates() itself before provision(), every time, safely (it
+no-ops if this site already has one) — so this stays what it says on the
+tin: one call, not one call plus a prerequisite you have to remember per
+site.
 """
 
 import frappe
@@ -42,16 +48,25 @@ from frappe.installer import install_app
 PRODUCTS = {
 	"payroll": {
 		"install": ["royce_payroll_ke"],
+		# Payroll Rates is per-SITE, not per-bench: each client here gets their
+		# own site (own database), so a fresh site has no rates record yet even
+		# if others do. bootstrap runs first, every time - idempotent (no-ops if
+		# this site already has an effective record), so this stays a true
+		# one-call onboarding instead of relying on a separate step someone has
+		# to remember per site.
+		"bootstrap": "royce_payroll_ke.royce_payroll_ke.setup.seed_default_rates",
 		"provision": "royce_payroll_ke.royce_payroll_ke.setup.provision",
 		"verify": "royce_payroll_ke.royce_payroll_ke.setup.verify",
 	},
 	"etims": {
 		"install": ["royce_etims"],
+		"bootstrap": None,
 		"provision": None,
 		"verify": None,
 	},
 	"talk": {
 		"install": ["royce_talk"],
+		"bootstrap": None,
 		"provision": None,
 		"verify": None,
 	},
@@ -138,6 +153,10 @@ def onboard_client(company, abbr, apps, country="Kenya", currency="KES", rates=N
 				"see that app's own onboarding checklist."
 			)
 			continue
+
+		if spec.get("bootstrap"):
+			bootstrap_fn = frappe.get_attr(spec["bootstrap"])
+			result["steps"][f"{product}_bootstrap"] = bootstrap_fn()
 
 		provision_fn = frappe.get_attr(spec["provision"])
 		result["steps"][f"{product}_provision"] = provision_fn(company, rates=rates)

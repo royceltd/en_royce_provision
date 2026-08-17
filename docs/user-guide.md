@@ -15,7 +15,7 @@ command. It assumes a site already exists and picks up from there.
 |---|---|---|
 | A site for this client | — | Create it yourself first: `bench new-site [client-site]` — this app doesn't create sites |
 | `royce_provision` installed on that site | `bench --site [site] list-apps` | `bench --site [site] install-app royce_provision` if not |
-| A submitted Payroll Rates record | `royce_payroll_ke`'s own Payroll Rates list | Needed if onboarding the `payroll` product. This is an **environment-wide, one-time** prerequisite, not a per-client one — run `bench --site [any-site-on-this-bench] execute royce_payroll_ke.royce_payroll_ke.setup.seed_default_rates` once per bench if it's never been done (safe to re-run — no-ops if a record already exists), or see `royce_payroll_ke`'s user guide section 2 to create one by hand |
+| ~~A submitted Payroll Rates record~~ | — | **Not a prerequisite anymore** — `onboard_client()`'s payroll branch calls `royce_payroll_ke.setup.seed_default_rates()` itself before provisioning, every time, safely (no-ops if this site already has one). Payroll Rates is per-**site**, not per-bench — each client here gets their own site/database, so this genuinely does need to happen per site, which is exactly why it's now automatic instead of a manual step to remember. Only reach for `royce_payroll_ke`'s user guide section 2 by hand if you want different values than the shipped default |
 | Company name, abbreviation, and which products were bought | — | Decided before you run anything |
 
 ---
@@ -86,6 +86,7 @@ A successful `payroll`-only run looks like this:
   "steps": {
     "install_apps": {"royce_payroll_ke": "installed"},
     "company": "Acme Ltd",
+    "payroll_bootstrap": {"status": "seeded", "rates": "2026-01-01"},
     "payroll_provision": {
       "rates": "2026-01-01",
       "income_tax_slab": "Kenya PAYE Placeholder 2026",
